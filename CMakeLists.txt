@@ -11,22 +11,23 @@ set(CMAKE_CXX_STANDARD 17)
 pico_sdk_init()
 
 add_executable(picosynth
-  sine_wave.c
+  src/main.c
+  src/kps.c
 )
 
 target_link_libraries(picosynth PRIVATE
   pico_stdlib
   pico_audio_i2s
+  pico_rand
 )
 
 target_compile_definitions(picosynth PRIVATE
   PICO_AUDIO_I2S_MONO_INPUT=1
   USE_AUDIO_I2S=1
-  #            PICO_AUDIO_I2S_DATA_PIN=22
-  #            PICO_AUDIO_I2S_CLOCK_PIN_BASE=23
-  #            PICO_DEFAULT_UART=0
-  #            PICO_DEFAULT_UART_TX_PIN=28
-  #            PICO_DEFAULT_UART_RX_PIN=29
+)
+
+target_include_directories(picosynth PRIVATE
+  ${CMAKE_CURRENT_LIST_DIR}/inc
 )
 
 pico_enable_stdio_usb(picosynth 1)
