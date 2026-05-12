@@ -17,8 +17,11 @@ add_executable(picosynth
 
 target_link_libraries(picosynth PRIVATE
   pico_stdlib
+  hardware_gpio
   pico_audio_i2s
   pico_rand
+  pico_time
+  pico_util
 )
 
 target_compile_definitions(picosynth PRIVATE

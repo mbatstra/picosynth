@@ -1,13 +1,24 @@
 #include "cfg.h"
-
 #include "kps.h"
+
 #include "pico/audio_i2s.h"
+#include "hardware/gpio.h"
 #include "pico/time.h"
 #include "pico/stdlib.h"
+#include "pico/util/queue.h"
+#include "pico/types.h"
 
-#include <pico/types.h>
 #include <stdint.h>
 #include <stdio.h>
+
+typedef enum {
+    BTN_A,
+    BTN_B,
+    BTN_C,
+    BTN_D,
+} button_id;
+
+queue_t btn_queue;
 
 static int16_t noise_table[TABLE_SIZE];
 
@@ -46,9 +57,44 @@ struct audio_buffer_pool *init_audio()
     return producer_pool;
 }
 
+void on_button_press(uint pin)
+{
+    button_id bid;
+
+    switch (pin) {
+        case BTN_A_PIN:
+            bid = BTN_A;
+            queue_try_add(&btn_queue, &bid);
+            break;
+        case BTN_B_PIN:
+            bid = BTN_B;
+            queue_try_add(&btn_queue, &bid);
+            break;
+        case BTN_C_PIN:
+            bid = BTN_C;
+            queue_try_add(&btn_queue, &bid);
+            break;
+        case BTN_D_PIN:
+            bid = BTN_D;
+            queue_try_add(&btn_queue, &bid);
+            break;
+    }
+}
+
+void btn_a_isr() { on_button_press(BTN_A_PIN); }
+void btn_b_isr() { on_button_press(BTN_B_PIN); }
+void btn_c_isr() { on_button_press(BTN_C_PIN); }
+void btn_d_isr() { on_button_press(BTN_D_PIN); }
+
 int main()
 {
     stdio_init_all();
+
+    queue_init(&btn_queue, sizeof(button_id), 4);
+    gpio_set_irq_enabled_with_callback(BTN_A_PIN, GPIO_IRQ_EDGE_FALL, true, btn_a_isr);
+    gpio_set_irq_enabled_with_callback(BTN_B_PIN, GPIO_IRQ_EDGE_FALL, true, btn_b_isr);
+    gpio_set_irq_enabled_with_callback(BTN_C_PIN, GPIO_IRQ_EDGE_FALL, true, btn_c_isr);
+    gpio_set_irq_enabled_with_callback(BTN_D_PIN, GPIO_IRQ_EDGE_FALL, true, btn_d_isr);
 
     delay_init_noise_src();
     struct delay delay = {
@@ -60,9 +106,20 @@ int main()
     const float amp = 0.6f;
 
     struct audio_buffer_pool *ap = init_audio();
+    button_id btn;
+
     while (true) {
+        if (queue_try_remove(&btn_queue, &btn)) {
+            switch (btn) {
+                case BTN_A:
+                    delay_excite(&delay);
+                    printf("button press\n");
+                    break;
+                default:
+                    break;
+            }
+        }
         if (get_absolute_time() > excite_at) {
-            delay_excite(&delay);
             excite_at = make_timeout_time_ms(1500);
         }
 
@@ -75,6 +132,5 @@ int main()
         buffer->sample_count = buffer->max_sample_count;
         give_audio_buffer(ap, buffer);
     }
-    puts("\n");
     return 0;
 }
