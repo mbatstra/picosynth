@@ -1,24 +1,16 @@
 #include "cfg.h"
 #include "kps.h"
 
+#include "common.h"
+
 #include "pico/audio_i2s.h"
 #include "hardware/gpio.h"
 #include "pico/time.h"
 #include "pico/stdlib.h"
-#include "pico/util/queue.h"
 #include "pico/types.h"
 
 #include <stdint.h>
 #include <stdio.h>
-
-typedef enum {
-    BTN_A,
-    BTN_B,
-    BTN_C,
-    BTN_D,
-} button_id;
-
-queue_t btn_queue;
 
 static int16_t noise_table[TABLE_SIZE];
 
@@ -57,80 +49,67 @@ struct audio_buffer_pool *init_audio()
     return producer_pool;
 }
 
-void on_button_press(uint pin)
-{
-    button_id bid;
-
-    switch (pin) {
-        case BTN_A_PIN:
-            bid = BTN_A;
-            queue_try_add(&btn_queue, &bid);
-            break;
-        case BTN_B_PIN:
-            bid = BTN_B;
-            queue_try_add(&btn_queue, &bid);
-            break;
-        case BTN_C_PIN:
-            bid = BTN_C;
-            queue_try_add(&btn_queue, &bid);
-            break;
-        case BTN_D_PIN:
-            bid = BTN_D;
-            queue_try_add(&btn_queue, &bid);
-            break;
-    }
-}
-
-void btn_a_isr() { on_button_press(BTN_A_PIN); }
-void btn_b_isr() { on_button_press(BTN_B_PIN); }
-void btn_c_isr() { on_button_press(BTN_C_PIN); }
-void btn_d_isr() { on_button_press(BTN_D_PIN); }
-
 int main()
 {
     stdio_init_all();
 
-    queue_init(&btn_queue, sizeof(button_id), 4);
-    gpio_set_irq_enabled_with_callback(BTN_A_PIN, GPIO_IRQ_EDGE_FALL, true, btn_a_isr);
-    gpio_set_irq_enabled_with_callback(BTN_B_PIN, GPIO_IRQ_EDGE_FALL, true, btn_b_isr);
-    gpio_set_irq_enabled_with_callback(BTN_C_PIN, GPIO_IRQ_EDGE_FALL, true, btn_c_isr);
-    gpio_set_irq_enabled_with_callback(BTN_D_PIN, GPIO_IRQ_EDGE_FALL, true, btn_d_isr);
+    gpio_init(25);
+    gpio_set_dir(25, GPIO_OUT);
+
+    hx711_multi_config_t hxmcfg;
+    hx711_multi_get_default_config(&hxmcfg);
+    hxmcfg.clock_pin = 26;
+    hxmcfg.data_pin_base = 6;
+    hxmcfg.chips_len = 4;
+    hxmcfg.pio = pio1;
+
+    hx711_multi_t hxm;
+    hx711_multi_init(&hxm, &hxmcfg);
+    hx711_multi_power_up(&hxm, hx711_gain_128);
+    hx711_wait_settle(hx711_rate_10);
 
     delay_init_noise_src();
     struct delay delay = {
-        .decay = 0.999f,
+        .decay = 0.992f,
         .filter_size = 5,
     };
-    delay_set_freq(&delay, 440.0f);
+    delay_set_freq(&delay, 220.0f);
+
+    const float freqs[] = { 110.0f, 220.0f, 330.0f, 440.0f, 550.0f };
+    int i = 0;
     absolute_time_t excite_at = make_timeout_time_ms(1500);
-    const float amp = 0.6f;
-
+    const float amp = 0.075f;
     struct audio_buffer_pool *ap = init_audio();
-    button_id btn;
+    bool led = true;
 
+    // int32_t arr[hxmcfg.chips_len];
     while (true) {
-        if (queue_try_remove(&btn_queue, &btn)) {
-            switch (btn) {
-                case BTN_A:
-                    delay_excite(&delay);
-                    printf("button press\n");
-                    break;
-                default:
-                    break;
-            }
-        }
-        if (get_absolute_time() > excite_at) {
-            excite_at = make_timeout_time_ms(1500);
-        }
+        // if (get_absolute_time() > excite_at) {
+        //     led = !led;
+        //     gpio_put(25, led);
 
-        struct audio_buffer *buffer = take_audio_buffer(ap, true);
-        int16_t *samples = (int16_t *) buffer->buffer->bytes;
-        for (uint i = 0; i < buffer->max_sample_count; i++) {
-            samples[i] = delay_get_next_sample(&delay) * amp * INT16_MAX;
-        }
+        //     delay_set_freq(&delay, freqs[i]);
+        //     i = (i + 1) % 5;
 
-        buffer->sample_count = buffer->max_sample_count;
-        give_audio_buffer(ap, buffer);
+        //     excite_at = make_timeout_time_ms(500);
+        //     delay_excite(&delay);
+        // }
+
+        // struct audio_buffer *buffer = take_audio_buffer(ap, true);
+        // int16_t *samples = (int16_t *) buffer->buffer->bytes;
+        // for (uint i = 0; i < buffer->max_sample_count; i++) {
+        //     samples[i] = delay_get_next_sample(&delay) * amp * INT16_MAX;
+        // }
+
+        // buffer->sample_count = buffer->max_sample_count;
+        // give_audio_buffer(ap, buffer);
+
+        // hx711_multi_get_values(&hxm, arr);
+        // for (int i = 0; i < hxmcfg.chips_len; i++) { printf("%d ", arr[i]); }
+        // printf("\n");
+        sleep_ms(500);
+        led = !led;
+        gpio_put(25, led);
     }
     return 0;
 }

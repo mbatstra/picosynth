@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.12)
 
-set(PICO_BOARD pico2_w)
+set(PICO_BOARD pico2)
 include(pico_sdk_import.cmake)
 include(pico_extras_import.cmake)
 
-project(picosynth C CXX)
+project(picosynth C CXX ASM)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
@@ -15,11 +15,14 @@ add_executable(picosynth
   src/kps.c
 )
 
+add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/modules/hx711-pico-c)
+
 target_link_libraries(picosynth PRIVATE
-  pico_stdlib
   hardware_gpio
+  hx711-pico-c
   pico_audio_i2s
   pico_rand
+  pico_stdlib
   pico_time
   pico_util
 )
@@ -31,6 +34,7 @@ target_compile_definitions(picosynth PRIVATE
 
 target_include_directories(picosynth PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}/inc
+  ${CMAKE_CURRENT_LIST_DIR}/modules/hx711-pico-c/include
 )
 
 pico_enable_stdio_usb(picosynth 1)

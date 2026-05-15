@@ -22,7 +22,7 @@ void delay_set_freq(struct delay *dly, float freq)
 
 void delay_excite(struct delay *dly)
 {
-    memcpy(dly->buf, noise_table, dly->size);
+    memcpy(dly->buf, noise_table, dly->size * sizeof(float));
 }
 
 float delay_get_next_sample(struct delay *dly)
