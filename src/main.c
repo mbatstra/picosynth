@@ -2,17 +2,20 @@
 #include "kps.h"
 
 #include "common.h"
-
-#include "pico/audio_i2s.h"
 #include "hardware/gpio.h"
+#include "pico/audio_i2s.h"
+#include "pico/multicore.h"
 #include "pico/time.h"
 #include "pico/stdlib.h"
 #include "pico/types.h"
 
+#include <boards/pico2.h>
+#include <hardware/regs/intctrl.h>
 #include <stdint.h>
 #include <stdio.h>
 
 static int16_t noise_table[TABLE_SIZE];
+static uint32_t core1_stack[CORE1_STACK_SIZE];
 
 struct audio_buffer_pool *init_audio()
 {
@@ -49,24 +52,43 @@ struct audio_buffer_pool *init_audio()
     return producer_pool;
 }
 
-int main()
+void core1_entry()
 {
-    stdio_init_all();
-
-    gpio_init(25);
-    gpio_set_dir(25, GPIO_OUT);
+    gpio_init(PICO_DEFAULT_LED_PIN);
+    gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
 
     hx711_multi_config_t hxmcfg;
     hx711_multi_get_default_config(&hxmcfg);
     hxmcfg.clock_pin = 26;
     hxmcfg.data_pin_base = 6;
     hxmcfg.chips_len = 4;
-    hxmcfg.pio = pio1;
+    hxmcfg.dma_irq_index = 1;
+    hxmcfg.pio = pio2;
 
     hx711_multi_t hxm;
     hx711_multi_init(&hxm, &hxmcfg);
     hx711_multi_power_up(&hxm, hx711_gain_128);
     hx711_wait_settle(hx711_rate_10);
+
+    int32_t arr[hxmcfg.chips_len];
+    bool led = true;
+
+    multicore_fifo_push_blocking(0); // signal init done
+
+    while (true) {
+        hx711_multi_get_values(&hxm, arr);
+        for (int i = 0; i < hxmcfg.chips_len; i++) { printf("%d,", arr[i]); }
+        printf("\n");
+        sleep_ms(500);
+        led = !led;
+        gpio_put(PICO_DEFAULT_LED_PIN, led);
+        printf("hello\n");
+    }
+}
+
+int main()
+{
+    stdio_init_all();
 
     delay_init_noise_src();
     struct delay delay = {
@@ -80,36 +102,26 @@ int main()
     absolute_time_t excite_at = make_timeout_time_ms(1500);
     const float amp = 0.075f;
     struct audio_buffer_pool *ap = init_audio();
-    bool led = true;
 
-    // int32_t arr[hxmcfg.chips_len];
+    multicore_launch_core1_with_stack(core1_entry, core1_stack, sizeof(uint32_t) * CORE1_STACK_SIZE);
+    (void) multicore_fifo_pop_blocking(); // wait for core 1 init
+
     while (true) {
-        // if (get_absolute_time() > excite_at) {
-        //     led = !led;
-        //     gpio_put(25, led);
+        if (get_absolute_time() > excite_at) {
+            delay_set_freq(&delay, freqs[i]);
+            i = (i + 1) % 5;
+            excite_at = make_timeout_time_ms(500);
+            delay_excite(&delay);
+        }
 
-        //     delay_set_freq(&delay, freqs[i]);
-        //     i = (i + 1) % 5;
+        struct audio_buffer *buffer = take_audio_buffer(ap, true);
+        int16_t *samples = (int16_t *) buffer->buffer->bytes;
+        for (uint i = 0; i < buffer->max_sample_count; i++) {
+            samples[i] = delay_get_next_sample(&delay) * amp * INT16_MAX;
+        }
 
-        //     excite_at = make_timeout_time_ms(500);
-        //     delay_excite(&delay);
-        // }
-
-        // struct audio_buffer *buffer = take_audio_buffer(ap, true);
-        // int16_t *samples = (int16_t *) buffer->buffer->bytes;
-        // for (uint i = 0; i < buffer->max_sample_count; i++) {
-        //     samples[i] = delay_get_next_sample(&delay) * amp * INT16_MAX;
-        // }
-
-        // buffer->sample_count = buffer->max_sample_count;
-        // give_audio_buffer(ap, buffer);
-
-        // hx711_multi_get_values(&hxm, arr);
-        // for (int i = 0; i < hxmcfg.chips_len; i++) { printf("%d ", arr[i]); }
-        // printf("\n");
-        sleep_ms(500);
-        led = !led;
-        gpio_put(25, led);
+        buffer->sample_count = buffer->max_sample_count;
+        give_audio_buffer(ap, buffer);
     }
     return 0;
 }

@@ -21,6 +21,7 @@ target_link_libraries(picosynth PRIVATE
   hardware_gpio
   hx711-pico-c
   pico_audio_i2s
+  pico_multicore
   pico_rand
   pico_stdlib
   pico_time
