@@ -1,4 +1,5 @@
 #include "cfg.h"
+#include "constants.h"
 #include "kps.h"
 
 #include "common.h"
@@ -10,12 +11,13 @@
 #include "pico/types.h"
 
 #include <boards/pico2.h>
-#include <hardware/regs/intctrl.h>
 #include <stdint.h>
 #include <stdio.h>
 
 static int16_t noise_table[TABLE_SIZE];
 static uint32_t core1_stack[CORE1_STACK_SIZE];
+
+static bool has_config;
 
 struct audio_buffer_pool *init_audio()
 {
@@ -72,6 +74,7 @@ void core1_entry()
 
     int32_t arr[hxmcfg.chips_len];
     bool led = true;
+    uint32_t delay_ms = has_config ? 500 : 250;
 
     multicore_fifo_push_blocking(0); // signal init done
 
@@ -79,16 +82,25 @@ void core1_entry()
         hx711_multi_get_values(&hxm, arr);
         for (int i = 0; i < hxmcfg.chips_len; i++) { printf("%d,", arr[i]); }
         printf("\n");
-        sleep_ms(500);
+        sleep_ms(delay_ms);
         led = !led;
         gpio_put(PICO_DEFAULT_LED_PIN, led);
-        printf("hello\n");
     }
 }
 
 int main()
 {
     stdio_init_all();
+
+    // keep this ABOVE core 1 launch
+    struct cfg cfg;
+    if (cfg_read(&cfg)) {
+        has_config = false;
+        cfg = (struct cfg) { .calib = { 0.42f, 0.42f, 0.42f, 0.42f } };
+        cfg_write(&cfg);
+    } else {
+        has_config = true;
+    }
 
     delay_init_noise_src();
     struct delay delay = {

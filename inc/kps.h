@@ -1,7 +1,8 @@
 #ifndef KPS_H
 #define KPS_H
 
-#include "cfg.h"
+#include "constants.h"
+
 #include <stddef.h>
 #include <stdint.h>
 

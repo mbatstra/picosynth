@@ -1,22 +1,20 @@
 #ifndef CFG_H
 #define CFG_H
 
-#define SAMPLE_RATE 48000.0f
-#define SAMPLES_PER_BUFFER 256
+#include "hardware/flash.h"
 
-#define FREQ_MIN 55.0f
-#define TABLE_SIZE 2048
-#define MAX_DELAY_SIZE 873 // sample rate over min freq
+#include <stdbool.h>
+#include <stdint.h>
 
-#define PICO_AUDIO_I2S_DATA_PIN 20
-#define PICO_AUDIO_I2S_CLOCK_PIN_BASE 18
-#define PICO_AUDIO_I2S_CLOCK_PINS_SWAPPED 1
+#define CFG_MAGIC "foo"
+#define CFG_MAGIC_LEN 3
+#define LAST_SECTOR_OFFSET (PICO_FLASH_SIZE_BYTES - FLASH_SECTOR_SIZE)
 
-#define CORE1_STACK_SIZE 1024
+struct cfg {
+  float calib[4];
+};
 
-#define BTN_A_PIN 6
-#define BTN_B_PIN 7
-#define BTN_C_PIN 8
-#define BTN_D_PIN 9
+int cfg_read(struct cfg *cfg);
+void cfg_write(struct cfg *cfg);
 
 #endif // !CFG_H

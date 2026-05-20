@@ -11,14 +11,17 @@ set(CMAKE_CXX_STANDARD 17)
 pico_sdk_init()
 
 add_executable(picosynth
-  src/main.c
+  src/cfg.c
   src/kps.c
+  src/main.c
 )
 
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/modules/hx711-pico-c)
 
 target_link_libraries(picosynth PRIVATE
+  hardware_flash
   hardware_gpio
+  hardware_sync
   hx711-pico-c
   pico_audio_i2s
   pico_multicore
